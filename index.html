@@ -67,6 +67,14 @@
       align-items: flex-start; max-width: 1350px; margin: 0 auto;
     }
 
+    .usage-footer {
+      position: fixed; right: 8px; bottom: 5px; z-index: 5;
+      max-width: 300px; margin: 0; padding: 3px 5px;
+      color: #765f51; font-family: Arial, sans-serif; font-size: 0.6rem;
+      line-height: 1.25; text-align: right; opacity: 0.48;
+      pointer-events: none; user-select: none;
+    }
+
     .board-container {
       position: relative; width: 510px; height: 570px; background: var(--board-color);
       border: 12px solid var(--board-border); border-radius: 24px;
@@ -185,6 +193,7 @@
        coordinate system on phones so the board and letters scale together. */
     @media (max-width: 600px) {
       :root { --piece-thickness: 20px; }
+      .usage-footer { right: 5px; bottom: 3px; max-width: 220px; font-size: 0.5rem; }
       body { padding: 8px; }
       .game-layout { gap: 20px; max-width: 340px; }
       .board-container {
@@ -229,6 +238,11 @@
       <div class="tray-title">Wooden Pieces Needed</div>
     </div>
   </div>
+
+  <footer class="usage-footer">
+    &copy; 2026 Hug and Grow Learning Studio. All rights reserved. For personal or single-classroom use only.
+    Copying, sharing, redistributing, reselling, or using this activity commercially without written permission is prohibited.
+  </footer>
 
   <script>
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
