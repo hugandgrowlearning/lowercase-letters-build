@@ -427,115 +427,7 @@
 
   <script>
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const isAppleTouchDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     let audioPrimed = false;
-    let appleDingNotBefore = 0;
-
-    function makeWavUrl(duration, compose) {
-      const rate = 22050;
-      const samples = new Float32Array(Math.ceil(duration * rate));
-      compose(samples, rate);
-      const buffer = new ArrayBuffer(44 + samples.length * 2);
-      const view = new DataView(buffer);
-      const writeText = (offset, text) => {
-        for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i));
-      };
-      writeText(0, 'RIFF');
-      view.setUint32(4, 36 + samples.length * 2, true);
-      writeText(8, 'WAVE'); writeText(12, 'fmt ');
-      view.setUint32(16, 16, true); view.setUint16(20, 1, true);
-      view.setUint16(22, 1, true); view.setUint32(24, rate, true);
-      view.setUint32(28, rate * 2, true); view.setUint16(32, 2, true);
-      view.setUint16(34, 16, true); writeText(36, 'data');
-      view.setUint32(40, samples.length * 2, true);
-      for (let i = 0; i < samples.length; i++) {
-        const value = Math.max(-1, Math.min(1, samples[i]));
-        view.setInt16(44 + i * 2, value < 0 ? value * 32768 : value * 32767, true);
-      }
-      return URL.createObjectURL(new Blob([buffer], { type: 'audio/wav' }));
-    }
-
-    function addTone(samples, rate, start, duration, frequency, volume = 0.3) {
-      const first = Math.floor(start * rate);
-      const count = Math.floor(duration * rate);
-      for (let i = 0; i < count && first + i < samples.length; i++) {
-        const envelope = Math.pow(1 - i / count, 2.2);
-        samples[first + i] += Math.sin(2 * Math.PI * frequency * i / rate) * envelope * volume;
-      }
-    }
-
-    function addPop(samples, rate, start, volume = 0.2) {
-      const first = Math.floor(start * rate);
-      const count = Math.floor(0.18 * rate);
-      for (let i = 0; i < count && first + i < samples.length; i++) {
-        const envelope = Math.pow(1 - i / count, 3);
-        samples[first + i] += (Math.random() * 2 - 1) * envelope * volume;
-      }
-    }
-
-    const embeddedDing = new Audio(makeWavUrl(0.72, (samples, rate) => {
-      addTone(samples, rate, 0, 0.68, 1174.66, 0.36);
-      addTone(samples, rate, 0, 0.55, 2349.32, 0.12);
-    }));
-    const embeddedCelebration = new Audio(makeWavUrl(1.55, (samples, rate) => {
-      [523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98].forEach((freq, i) =>
-        addTone(samples, rate, 0.08 + i * 0.14, 0.42, freq, 0.21));
-      addPop(samples, rate, 0, 0.27);
-      addPop(samples, rate, 0.43, 0.23);
-      addPop(samples, rate, 0.86, 0.25);
-      addTone(samples, rate, 0.96, 0.52, 2093, 0.2);
-    }));
-    /* An almost-silent media clip switches iOS back from its speech audio
-       session before the first placement sound, preventing volume ducking. */
-    const embeddedWarmup = new Audio(makeWavUrl(0.12, (samples, rate) => {
-      addTone(samples, rate, 0, 0.1, 440, 0.0001);
-    }));
-    embeddedDing.preload = 'auto';
-    embeddedCelebration.preload = 'auto';
-    embeddedWarmup.preload = 'auto';
-
-    async function playEmbeddedSound(audio) {
-      try {
-        audio.pause();
-        audio.currentTime = 0;
-        await audio.play();
-        return true;
-      } catch (error) {
-        return false;
-      }
-    }
-
-    function primeAppleMediaChannel() {
-      if (!isAppleTouchDevice) return;
-      /* If a child begins dragging while the letter name is still speaking,
-         release the speech session before priming normal media playback. */
-      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-
-      /* Safari/iOS can authorize HTMLAudioElements separately. Prime the
-         actual ding and celebration elements during the child's touch gesture,
-         so their later play() calls are not blocked after the drag finishes. */
-      [embeddedWarmup, embeddedDing, embeddedCelebration].forEach((audio) => {
-        const oldMuted = audio.muted;
-        audio.pause();
-        audio.currentTime = 0;
-        audio.muted = true;
-        const promise = audio.play();
-        if (promise && typeof promise.then === 'function') {
-          promise.then(() => {
-            audio.pause();
-            audio.currentTime = 0;
-            audio.muted = oldMuted;
-          }).catch(() => {
-            audio.muted = oldMuted;
-          });
-        } else {
-          audio.pause();
-          audio.currentTime = 0;
-          audio.muted = oldMuted;
-        }
-      });
-    }
 
     async function ensureAudioReady() {
       try {
@@ -715,14 +607,7 @@
     }
 
     async function playDing() {
-      /* Safari can reject a later HTMLAudioElement.play() even after a muted
-         warm-up. Use the already-unlocked Web Audio context for the ding on
-         Safari/iPad as well as Chrome. Keep the short Apple delay so speech
-         synthesis has time to release its audio-ducking envelope. */
-      if (isAppleTouchDevice) {
-        const wait = Math.max(0, appleDingNotBefore - performance.now());
-        if (wait > 0) await new Promise(resolve => setTimeout(resolve, wait));
-      }
+      /* One audio path only: use the already-unlocked Web Audio context. */
       if (!(await ensureAudioReady())) return;
       const now = audioCtx.currentTime;
       [1174.66, 2349.32].forEach((freq, index) => {
@@ -816,7 +701,6 @@
       utterance.lang = 'en-US';
       utterance.rate = 0.78;
       utterance.pitch = 1.08;
-      if (isAppleTouchDevice) appleDingNotBefore = performance.now() + 1050;
       window.speechSynthesis.speak(utterance);
     }
 
@@ -1052,7 +936,6 @@
         if (e.cancelable) e.preventDefault();
         active = true;
         ensureAudioReady();
-        primeAppleMediaChannel();
         playAudioTone(300, 0.05);
 
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
