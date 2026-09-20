@@ -511,9 +511,30 @@
       /* If a child begins dragging while the letter name is still speaking,
          release the speech session before priming normal media playback. */
       if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-      embeddedWarmup.pause();
-      embeddedWarmup.currentTime = 0;
-      embeddedWarmup.play().catch(() => {});
+
+      /* Safari/iOS can authorize HTMLAudioElements separately. Prime the
+         actual ding and celebration elements during the child's touch gesture,
+         so their later play() calls are not blocked after the drag finishes. */
+      [embeddedWarmup, embeddedDing, embeddedCelebration].forEach((audio) => {
+        const oldMuted = audio.muted;
+        audio.pause();
+        audio.currentTime = 0;
+        audio.muted = true;
+        const promise = audio.play();
+        if (promise && typeof promise.then === 'function') {
+          promise.then(() => {
+            audio.pause();
+            audio.currentTime = 0;
+            audio.muted = oldMuted;
+          }).catch(() => {
+            audio.muted = oldMuted;
+          });
+        } else {
+          audio.pause();
+          audio.currentTime = 0;
+          audio.muted = oldMuted;
+        }
+      });
     }
 
     async function ensureAudioReady() {
