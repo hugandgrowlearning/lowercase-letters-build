@@ -976,8 +976,16 @@
 
     function enableDrag(elmnt) {
       let active = false;
-      let offsetX = 0, offsetY = 0;
-      let centerOnPointer = false;
+      let grabOffsetX = 0;
+      let grabOffsetY = 0;
+
+      function normalTransform() {
+        return `rotate(${elmnt.dataset.rot}deg) scale(${elmnt.dataset.scaleX || 1}, ${elmnt.dataset.scaleY || 1})`;
+      }
+
+      function dragTransform() {
+        return `translate(-50%, -50%) rotate(${elmnt.dataset.rot}deg) scale(${elmnt.dataset.scaleX || 1}, ${elmnt.dataset.scaleY || 1})`;
+      }
 
       function onStart(e) {
         if (e.cancelable) e.preventDefault();
@@ -988,37 +996,22 @@
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
         const clientY = e.touches ? e.touches[0].clientY : e.clientY;
 
+        // Use the VISUAL center of the transformed piece. This keeps diagonal
+        // and rotated sticks from jumping when they are reparented to body.
         const rect = elmnt.getBoundingClientRect();
-        centerOnPointer = elmnt.dataset.pieceType === 'little-line' ||
-          elmnt.dataset.pieceType === 'medium-line' ||
-          elmnt.dataset.pieceType === 'dot';
-        if (centerOnPointer) {
-          /* Little lines are commonly rotated 90 degrees.  A rotated line's
-             visual bounding box has swapped dimensions, while its CSS left
-             and top still refer to the unrotated box.  Anchor it by its true
-             transform center so it does not jump away from the pointer. */
-          const size = pieceSizes[elmnt.dataset.pieceType];
-          offsetX = size.width / 2;
-          offsetY = size.height / 2;
-        } else {
-          offsetX = clientX - rect.left;
-          offsetY = clientY - rect.top;
-        }
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        grabOffsetX = clientX - centerX;
+        grabOffsetY = clientY - centerY;
 
         elmnt.classList.add('is-dragging');
-        /* Clear Safari's old tray layer before moving the element to body. */
         elmnt.style.visibility = 'hidden';
         void elmnt.offsetHeight;
         document.body.appendChild(elmnt);
         elmnt.style.position = 'fixed';
-        if (centerOnPointer) {
-          elmnt.style.left = `${clientX}px`;
-          elmnt.style.top = `${clientY}px`;
-          elmnt.style.transform = `translate(-50%, -50%) rotate(${elmnt.dataset.rot}deg) scale(${elmnt.dataset.scaleX || 1}, ${elmnt.dataset.scaleY || 1})`;
-        } else {
-          elmnt.style.left = `${clientX - offsetX}px`;
-          elmnt.style.top = `${clientY - offsetY}px`;
-        }
+        elmnt.style.left = `${centerX}px`;
+        elmnt.style.top = `${centerY}px`;
+        elmnt.style.transform = dragTransform();
         elmnt.style.visibility = 'visible';
 
         window.addEventListener('mousemove', onMove);
@@ -1034,14 +1027,8 @@
 
         const moveX = e.touches ? e.touches[0].clientX : e.clientX;
         const moveY = e.touches ? e.touches[0].clientY : e.clientY;
-
-        if (centerOnPointer) {
-          elmnt.style.left = `${moveX}px`;
-          elmnt.style.top = `${moveY}px`;
-        } else {
-          elmnt.style.left = `${moveX - offsetX}px`;
-          elmnt.style.top = `${moveY - offsetY}px`;
-        }
+        elmnt.style.left = `${moveX - grabOffsetX}px`;
+        elmnt.style.top = `${moveY - grabOffsetY}px`;
       }
 
       function onEnd(e) {
@@ -1056,15 +1043,11 @@
 
         const boardRect = document.getElementById('board').getBoundingClientRect();
         const pieceRect = elmnt.getBoundingClientRect();
-
         const currentCx = pieceRect.left + pieceRect.width / 2 - boardRect.left;
         const currentCy = pieceRect.top + pieceRect.height / 2 - boardRect.top;
 
-        /* Remove the temporary pointer-centering transform before snapping the
-           piece into either of its normal containers. */
-        if (centerOnPointer) {
-          elmnt.style.transform = `rotate(${elmnt.dataset.rot}deg) scale(${elmnt.dataset.scaleX || 1}, ${elmnt.dataset.scaleY || 1})`;
-        }
+        // Restore the normal transform before snapping into board or tray.
+        elmnt.style.transform = normalTransform();
 
         const targetX = parseFloat(elmnt.dataset.targetX);
         const targetY = parseFloat(elmnt.dataset.targetY);
@@ -1082,7 +1065,7 @@
             elmnt.classList.remove('is-dragging');
             elmnt.style.visibility = 'visible';
           });
-          
+
           elmnt.onmousedown = null;
           elmnt.ontouchstart = null;
           elmnt.style.cursor = 'default';
