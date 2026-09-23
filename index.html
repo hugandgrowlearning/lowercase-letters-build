@@ -976,6 +976,7 @@
 
     function enableDrag(elmnt) {
       let active = false;
+      let activePointerId = null;
       let grabOffsetX = 0;
       let grabOffsetY = 0;
 
@@ -988,21 +989,25 @@
       }
 
       function onStart(e) {
+        if (active) return;
         if (e.cancelable) e.preventDefault();
         active = true;
+        activePointerId = e.pointerId;
         ensureAudioReady();
         playAudioTone(300, 0.05);
 
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-
-        // Use the VISUAL center of the transformed piece. This keeps diagonal
-        // and rotated sticks from jumping when they are reparented to body.
+        const clientX = e.clientX;
+        const clientY = e.clientY;
         const rect = elmnt.getBoundingClientRect();
         const centerX = rect.left + rect.width / 2;
         const centerY = rect.top + rect.height / 2;
         grabOffsetX = clientX - centerX;
         grabOffsetY = clientY - centerY;
+
+        // Pointer capture is especially helpful on interactive classroom boards:
+        // the piece keeps receiving movement even if the finger/stylus moves
+        // outside its original bounds.
+        try { elmnt.setPointerCapture(activePointerId); } catch (error) {}
 
         elmnt.classList.add('is-dragging');
         elmnt.style.visibility = 'hidden';
@@ -1013,40 +1018,26 @@
         elmnt.style.top = `${centerY}px`;
         elmnt.style.transform = dragTransform();
         elmnt.style.visibility = 'visible';
-
-        window.addEventListener('mousemove', onMove);
-        window.addEventListener('touchmove', onMove, { passive: false });
-        window.addEventListener('mouseup', onEnd);
-        window.addEventListener('touchend', onEnd);
-        window.addEventListener('touchcancel', onEnd);
       }
 
       function onMove(e) {
-        if (!active) return;
+        if (!active || e.pointerId !== activePointerId) return;
         if (e.cancelable) e.preventDefault();
-
-        const moveX = e.touches ? e.touches[0].clientX : e.clientX;
-        const moveY = e.touches ? e.touches[0].clientY : e.clientY;
-        elmnt.style.left = `${moveX - grabOffsetX}px`;
-        elmnt.style.top = `${moveY - grabOffsetY}px`;
+        elmnt.style.left = `${e.clientX - grabOffsetX}px`;
+        elmnt.style.top = `${e.clientY - grabOffsetY}px`;
       }
 
       function onEnd(e) {
-        if (!active) return;
+        if (!active || (e.pointerId !== undefined && e.pointerId !== activePointerId)) return;
         active = false;
-
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('touchmove', onMove);
-        window.removeEventListener('mouseup', onEnd);
-        window.removeEventListener('touchend', onEnd);
-        window.removeEventListener('touchcancel', onEnd);
+        try { elmnt.releasePointerCapture(activePointerId); } catch (error) {}
+        activePointerId = null;
 
         const boardRect = document.getElementById('board').getBoundingClientRect();
         const pieceRect = elmnt.getBoundingClientRect();
         const currentCx = pieceRect.left + pieceRect.width / 2 - boardRect.left;
         const currentCy = pieceRect.top + pieceRect.height / 2 - boardRect.top;
 
-        // Restore the normal transform before snapping into board or tray.
         elmnt.style.transform = normalTransform();
 
         const targetX = parseFloat(elmnt.dataset.targetX);
@@ -1066,8 +1057,10 @@
             elmnt.style.visibility = 'visible';
           });
 
-          elmnt.onmousedown = null;
-          elmnt.ontouchstart = null;
+          elmnt.removeEventListener('pointerdown', onStart);
+          elmnt.removeEventListener('pointermove', onMove);
+          elmnt.removeEventListener('pointerup', onEnd);
+          elmnt.removeEventListener('pointercancel', onEnd);
           elmnt.style.cursor = 'default';
 
           playDing();
@@ -1097,8 +1090,10 @@
         }
       }
 
-      elmnt.onmousedown = onStart;
-      elmnt.ontouchstart = onStart;
+      elmnt.addEventListener('pointerdown', onStart);
+      elmnt.addEventListener('pointermove', onMove);
+      elmnt.addEventListener('pointerup', onEnd);
+      elmnt.addEventListener('pointercancel', onEnd);
     }
 
     initSelector();
