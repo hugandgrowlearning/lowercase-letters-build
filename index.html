@@ -105,6 +105,30 @@
       filter: none !important;
       -webkit-filter: none !important;
     }
+
+    /* iPad/iPhone Safari: filter: drop-shadow() can leave faint ghost
+       shadows in the tray after draggable pieces are reparented.
+       Disable filtered shadows on Apple touch browsers and use the
+       Safari-safe box-shadow only for straight rectangular pieces. */
+    @supports (-webkit-touch-callout: none) {
+      .stick {
+        filter: none !important;
+        -webkit-filter: none !important;
+      }
+
+      .stick.big-line,
+      .stick.little-line,
+      .stick.medium-line {
+        box-shadow: 3px 5px 5px rgba(73, 43, 16, 0.20);
+      }
+
+      .stick.big-curve,
+      .stick.little-curve,
+      .stick.dot {
+        box-shadow: none !important;
+      }
+    }
+
     .stick:active { cursor: grabbing; z-index: 100; }
     
     .stick.big-line {
